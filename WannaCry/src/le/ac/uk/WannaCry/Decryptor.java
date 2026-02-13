@@ -1,16 +1,36 @@
 package le.ac.uk.WannaCry;
-
-import java.io.*;
+import java.io.*; // uncessary? not sure. 
 import java.net.Socket;
+// Zara Imports
+import java.security.KeyFactory;
+import java.nio.file.Files;
+import java.security.PrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.io.File;
 
 public class Decryptor {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception{
         String host = args[0];
         String port = args[1];
         String userid = args[2];
 
         // TODO - Generate signature using userid and AES key as content with SHA256withRSA (and public or private key that identifies user?)
-        byte[] decryptedAESKeyBytes = null;
+        byte[] decryptedAESKeyBytes = null; // what the server sends back
+        byte[] Encrypted_AES_Key = null; // read from aes.key
+
+        try(FileInputStream FIS = new FileInputStream("aes.key")){ // lab1
+             Encrypted_AES_Key = FIS.readAllBytes();
+        }
+
+        // Lab 3. 
+        File File_For_Key = new File(userid + ".prv");
+        byte[] Byte_From_Key = Files.readAllBytes(File_For_Key.toPath());
+        PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(Byte_From_Key);
+        KeyFactory Factory_Key = KeyFactory.getInstance("RSA");
+        PrivateKey Key_Private = Factory_Key.generatePrivate(spec);
+
+
+
         try (Socket socket = new Socket(host, Integer.parseInt(port))) {
             DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
             DataInputStream dis = new DataInputStream(socket.getInputStream());

